@@ -1,8 +1,10 @@
-"""Operations"""
+# """Operations"""
 import torch
-import torch.nn as nn
-import torch.utils.data.sampler as sampler
+# import torch.nn as nn
+# import torch.utils.data.sampler as sampler
 import numpy as np
+import tensorflow as tf
+from tensorflow import nn as nn
 
 
 # --------- Neural network modules -----------------------------
@@ -21,13 +23,13 @@ def weight_init(m):
 
 # --------- straight-through (ST) estimators for binary neurons ---------
 # reference: https://r2rt.com/binary-stochastic-neurons-in-tensorflow.html
-class ST_Indicator(torch.autograd.Function):
+class ST_Indicator():
     """ Straight-through indicator function 1(0.5 =< input):
     rounds a tensor whose values are in [0,1] to a tensor with values in {0, 1},
     using identity for its gradient.
     """
     def forward(self, input):
-        return torch.round(input)
+        return tf.math.round(input)
 
     def backward(self, grad_output):
         """
@@ -36,7 +38,7 @@ class ST_Indicator(torch.autograd.Function):
         return grad_output
 
 
-class ST_StochasticIndicator(torch.autograd.Function):
+class ST_StochasticIndicator():
     """ Stochastic version of ST_Indicator:
     indicator function 1(z =< input) where z is drawn from Uniform[0,1]
     with identity for its gradient.
@@ -53,7 +55,7 @@ class ST_StochasticIndicator(torch.autograd.Function):
         # draw samples from Uniform[0,1]
         z = input.new(input.size()).uniform_(0, 1)
         # z = torch.FloatTensor(input.shape).uniform_(0, 1)
-        return torch.abs(torch.round(input-z+0.5))
+        return tf.math.abs(tf.math.round(input-z+0.5))
 
     def backward(self, grad_output):
         """
@@ -66,7 +68,7 @@ class ST_StochasticIndicator(torch.autograd.Function):
 def neg_ce_fairflip(p, coeff):
     ''' Compute the negative CE between p and Bernouli(0.5)
     '''
-    nce = - 0.5*coeff*(torch.log(p + 1e-10) + torch.log(1.0 - p + 1e-10)).mean()
+    nce = - 0.5*coeff*(tf.math.log(p + 1e-10) + tf.math.log(1.0 - p + 1e-10)).mean()
     return nce
 
 
@@ -266,7 +268,8 @@ def node_pred(nodes, edges, tree_modules, input):
     input = tree_modules[node_final]['transform'](input)
 
     # Perform classification with the last node:
-    prob = torch.unsqueeze(prob, 1)
+    prob = tf.expand_dims(prob)
+        # torch.unsqueeze(prob, 1)
     y_pred = prob * tree_modules[node_final]['LR'](input)
     return y_pred
 
@@ -299,12 +302,12 @@ def node_pred_split(input, nodes, edges, tree_modules, node_left, node_right):
 
     node_final = nodes[-1]
     input = tree_modules[node_final]['transform'](input)
-    prob = torch.unsqueeze(prob, 1)
+    prob = tf.expand_dims(prob)
 
     # Perform classification with the last node:
     prob_last = tree_modules[node_final]['router'](input) if state \
         else (1.0 - tree_modules[node_final]['router'](input))
-    prob_last = torch.unsqueeze(prob_last, 1)
+    prob_last = tf.expand_dims(prob_last)
 
     # Split the last node:
     y_pred = prob * (prob_last * node_left['LR'](node_left['transform'](input))
@@ -344,7 +347,7 @@ def get_params_node(grow, node_idx, model):
 
 
 # ---------------------- Data loader extra options ----------------------------
-class ChunkSampler(sampler. Sampler):
+class ChunkSampler():
     """ Samples elements sequentially from some offset.
     Args:
         num_samples: # of desired datapoints

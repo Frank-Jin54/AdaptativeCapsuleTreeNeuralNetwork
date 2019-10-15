@@ -1,8 +1,8 @@
 ''' Visualisation tools for analysis '''
-import torch
-import torch.nn as nn
-from torch.autograd import Variable
-import torch.nn.functional as F
+# import torch
+# import torch.nn as nn
+# from torch.autograd import Variable
+# import torch.nn.functional as F
 import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
@@ -53,7 +53,7 @@ def visualise_routers_behaviours(model, data_loader,
     num_rows = 2*len(edge_nodes) # first row for showing the class fistribution
     num_cols = len(ops.get_past_leaf_nodes(tree_struct, edge_nodes[-1])) # get the list of leaf nodes
     if fig_scale == None:
-        fig = plt.figure(figsize=(num_cols,num_rows))
+        fig = plt.figure(figsize=(num_cols, num_rows))
     else:
         fig = plt.figure(figsize=(fig_scale*num_cols, fig_scale*num_rows))
     plt.suptitle(title, fontsize= title_font)

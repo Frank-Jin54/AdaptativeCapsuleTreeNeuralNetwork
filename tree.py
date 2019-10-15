@@ -8,11 +8,12 @@ import sys
 import json
 import time
 import numpy as np
+import tensorflow as tf
 
-import torch
-from torch.autograd import Variable
+# import torch
+# from torch.autograd import Variable
 import torch.nn.functional as F
-from torch import optim
+# from torch import optim
 
 import matplotlib
 matplotlib.use('agg')
@@ -78,12 +79,13 @@ parser.add_argument('--visualise_split', action='store_true', help='visuliase ho
 args = parser.parse_args()
 
 # GPUs devices:
-args.cuda = not args.no_cuda and torch.cuda.is_available()
-if args.gpu:
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+# args.cuda = not args.no_cuda and torch.cuda.is_available()
+# if args.gpu:
+#     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
 # Set the seed for repeatability
-set_random_seed(args.seed, args.cuda)
+# set_random_seed(args.seed, args.cuda)
+tf.compat.v1.set_random_seed(args.seed)
 
 # Define a dictionary for post-inspection of the model:
 records = vars(args)
@@ -137,7 +139,7 @@ def train(model, data_loader, optimizer, node_idx):
         x, y = Variable(x), Variable(y)
         y_pred, p_out = model(x)
 
-        loss = F.nll_loss(y_pred, y)
+        loss = tf.keras.sum(tf.keras.binary_crossentropy(y, y_pred), axis=-1)
         # train_epoch_loss += loss.data[0] * y.size(0)
         # train_loss += loss.data[0] * y.size(0)
         train_epoch_loss += loss.data * y.size(0)
@@ -178,18 +180,19 @@ def valid(model, data_loader, node_idx, struct):
     correct = 0
 
     for data, target in data_loader:
-        if args.cuda:
-            data, target = data.cuda(), target.cuda()
-        data, target = Variable(data, volatile=True), Variable(target)
+        # if args.cuda:
+        #     data, target = data.cuda(), target.cuda()
+        # data, target = Variable(data, volatile=True), Variable(target)
         output = model(data)
 
         # sum up batch loss
         # valid_epoch_loss += F.nll_loss(
         #     output, target, size_average=False,
         # ).data[0]
-        valid_epoch_loss += F.nll_loss(
-            output, target, size_average=False,
-        ).data
+        # valid_epoch_loss += F.nll_loss(
+        #     output, target, size_average=False,
+        # ).data
+        valid_epoch_loss += tf.keras.sum(tf.keras.binary_crossentropy(target, output), axis=-1)
 
         pred = output.data.max(1, keepdim=True)[1]
         correct += pred.eq(target.data.view_as(pred)).cpu().sum()
@@ -256,12 +259,12 @@ def test(model, data_loader):
     test_loss = 0
     correct = 0
     for data, target in data_loader:
-        if args.cuda:
-            data, target = data.cuda(), target.cuda()
-        data, target = Variable(data, volatile=True), Variable(target)
+        # if args.cuda:
+        #     data, target = data.cuda(), target.cuda()
+        # data, target = Variable(data, volatile=True), Variable(target)
         output = model(data)
         # test_loss += F.nll_loss(output, target, size_average=False).data[0]
-        test_loss += F.nll_loss(output, target, size_average=False).data.item()
+        test_loss += tf.keras.sum(tf.keras.binary_crossentropy(target, output), axis=-1)
         pred = output.data.max(1, keepdim=True)[1]
         correct += pred.eq(target.data.view_as(pred)).cpu().sum()
 
@@ -290,7 +293,7 @@ def _load_checkpoint(model_file_name):
     save_dir = "./experiments/{}/{}/{}/{}".format(
         args.dataset, args.experiment, args.subexperiment, 'checkpoints',
     )
-    model = torch.load(save_dir + '/' + model_file_name)
+    model = tf.saved_model.load(save_dir + '/' + model_file_name)
     if args.cuda:
         model.cuda()
     return model
@@ -308,7 +311,7 @@ def checkpoint_model(model_file_name, struct=None, modules=None, model=None, fig
     # save the model:
     save_dir = "./experiments/{}/{}/{}/{}".format(args.dataset, args.experiment, args.subexperiment, 'checkpoints')
     model_path = save_dir + '/' + model_file_name
-    torch.save(model, model_path)
+    tf.saved_model.save(model, model_path)
     print("Model saved to {}".format(model_path))
 
     # save tree histograms:
@@ -421,9 +424,7 @@ def optimize_fixed_tree(
         if not(p.requires_grad):
             print("(Grad not required)" + names[i])
 
-    optimizer = optim.Adam(
-        filter(lambda p: p.requires_grad, params), lr=args.lr,
-    )
+    optimizer = tf.optimizers.Adam(filter(lambda p: p.requires_grad, params), lr=args.lr)
     if args.scheduler:
         scheduler = get_scheduler(args.scheduler, optimizer, grow)
 

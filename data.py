@@ -1,8 +1,9 @@
 """Data loader"""
-import torch
-import torchvision
-from torchvision import datasets, transforms
+# import torch
+# import torchvision
+# from torchvision import datasets, transforms
 from ops import ChunkSampler
+from tensorflow import keras
 
 
 def get_dataloaders(
@@ -32,6 +33,10 @@ def get_dataloaders(
                 ],
             )
         else:
+            fashion_mnist=keras.datasets.fashion_mnist
+            (train_images, train_labels), (test_images, test_labels)=fashion_mnist.load_data()
+
+
             transform_train = transforms.Compose(
                 [
                     transforms.ToTensor(),

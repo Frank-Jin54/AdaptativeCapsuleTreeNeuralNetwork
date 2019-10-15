@@ -2,8 +2,8 @@
 import warnings
 import torch
 import ops
-import torch.nn as nn
-import torch.nn.functional as F
+from tensorflow import nn as nn
+# import torch.nn.functional as F
 from torch.autograd import Variable
 from ops import get_leaf_nodes, get_past_leaf_nodes, get_path_to_root
 import tensorflow as tf
@@ -85,9 +85,9 @@ class Tree():
         self.tree_modules = []
         for i, node in enumerate(tree_modules):
             node_modules = tf.keras.Sequential()
-            node_modules.add_module('transform', node["transform"])
-            node_modules.add_module('classifier', node["classifier"])
-            node_modules.add_module('router', node["router"])
+            node_modules.add(node["transform"])
+            node_modules.add(node["classifier"])
+            node_modules.add(node["router"])
             self.tree_modules.append(node_modules)
 
         # add children nodes:
@@ -143,9 +143,9 @@ class Tree():
                 y_pred += self.node_pred(input, nodes, edges)
         
         if self.training:
-            return torch.log(1e-10 + y_pred), prob_last
+            return tf.math.log(1e-10 + y_pred), prob_last
         else:
-            return torch.log(1e-10 + y_pred)
+            return tf.math.log(1e-10 + y_pred)
 
     def forward_breadth_first(self, input):
         """ Breadth first forward pass.
@@ -170,7 +170,7 @@ class Tree():
                 s_list.append(self.child_right.classifier(self.child_right.transform(inp)))
             
                 p_left = self.tree_modules[node['index']].router(inp)
-                p_left = torch.unsqueeze(p_left, 1)
+                p_left = tf.expand_dims(p_left, 1)
                 prob_last = p_left
 
                 r_list.append(ro * p_left)
@@ -193,7 +193,7 @@ class Tree():
                 t_list.append(self.tree_modules[node['left_child']].transform(inp))
                 t_list.append(self.tree_modules[node['right_child']].transform(inp))
                 p_left = self.tree_modules[node['index']].router(inp)
-                p_left = torch.unsqueeze(p_left, 1)
+                p_left = tf.expand_dims(p_left, 1)
                 r_list.append(ro * p_left)
                 r_list.append(ro * (1.0 - p_left))
 
@@ -202,7 +202,7 @@ class Tree():
         for r, s in zip(r_list, s_list):
             y_pred += r * torch.exp(s)
 
-        out = torch.log(1e-10 + y_pred)
+        out = tf.math.log(1e-10 + y_pred)
 
         if self.training:
             return out, prob_last
@@ -226,7 +226,7 @@ class Tree():
                 prob = prob * (1.0 - self.tree_modules[node].router(input))
 
         if not (isinstance(prob, float)):
-            prob = torch.unsqueeze(prob, 1)
+            prob = tf.expand_dims(prob, 1)
 
         node_final = nodes[-1]
         input = self.tree_modules[node_final].transform(input)
@@ -267,13 +267,13 @@ class Tree():
                 prob = prob * (1.0 - self.tree_modules[node].router(input))
 
         if not (isinstance(prob, float)):
-            prob = torch.unsqueeze(prob, 1)
+            prob = tf.expand_dims(prob, 1)
 
         node_final = nodes[-1]
         input = self.tree_modules[node_final].transform(input)
 
         # Perform classification with the last node:
-        prob_last = torch.unsqueeze(
+        prob_last = tf.expand_dims(
             self.tree_modules[node_final].router(input), 1,
         )
 
@@ -314,7 +314,7 @@ class Tree():
                 prob = prob * (1.0 - self.tree_modules[node].router(input))
 
         if not (isinstance(prob, float)):
-            prob = torch.unsqueeze(prob, 1)
+            prob = tf.expand_dims(prob, 1)
 
         # TODO: need to make prob_last a vector of ones instead of a scaler?
         prob_last = 1.0
@@ -344,13 +344,13 @@ class Tree():
                     prob = prob * (1.0 - self.tree_modules[node].router(input))
 
             if not (isinstance(prob, float)):
-                prob = torch.unsqueeze(prob, 1)
+                prob = tf.expand_dims(prob, 1)
 
             # account for the split at the last node
             if self.split and nodes[-1] == self.node_split:
                 node_final = nodes[-1]
                 input = self.tree_modules[node_final].transform(input)
-                prob_last = torch.unsqueeze(self.tree_modules[node_final].router(input), 1)
+                prob_last = tf.expand_dims(self.tree_modules[node_final].router(input), 1)
                 prob = torch.cat((prob_last*prob, (1.0-prob_last)*prob), dim=1)
 
             # concatenate
@@ -377,7 +377,7 @@ class Tree():
                 prob = prob * (1.0 - self.tree_modules[node].router(input))
 
         if not (isinstance(prob, float)):
-            prob = torch.unsqueeze(prob, 1)
+            prob = tf.expand_dims(prob, 1)
             prob_sum = prob.sum(dim=0)
             return prob_sum.data[0]
         else:
@@ -417,13 +417,13 @@ class Tree():
                     prob = prob * (1.0 - self.tree_modules[node].router(output))
 
             if not (isinstance(prob, float)):
-                prob = torch.unsqueeze(prob, 1)
+                prob = tf.expand_dims(prob, 1)
 
             # account for the split at the last node
             if self.split and nodes[-1] == self.node_split:
                 node_final = nodes[-1]
                 output = self.tree_modules[node_final].transform(output)
-                prob_last = torch.unsqueeze(
+                prob_last = tf.expand_dims(
                     self.tree_modules[node_final].router(output), 1)
                 prob = torch.cat((prob_last*prob, (1.0-prob_last)*prob), dim=1)
 
@@ -468,26 +468,26 @@ class Tree():
 
 # ############################ Building blocks  ##############################
 # ########################### (1) Transformers ###############################
-class Identity(nn.Module):
+class Identity():
     def __init__(self,input_nc, input_width, input_height, **kwargs):
-        super(Identity, self).__init__()
+        # super(Identity, self).__init__()
         self.outputshape = (1, input_nc, input_width, input_height)
 
     def forward(self, x):
         return x
 
 
-class JustConv(nn.Module):
+class JustConv():
     """ 1 convolution """
     def __init__(self, input_nc, input_width, input_height, 
                  ngf=6, kernel_size=5, stride=1, **kwargs):
-        super(JustConv, self).__init__()
+        # super(JustConv, self).__init__()
 
         if max(input_width, input_height) < kernel_size:
             warnings.warn('Router kernel too large, shrink it')
             kernel_size = max(input_width, input_height)
 
-        self.conv1 = nn.Conv2d(input_nc, ngf, kernel_size, stride=stride)
+        self.conv1 = tf.keras.layers.Conv2D(input_nc, ngf, kernel_size, stride=stride)
         self.outputshape = self.get_outputshape(input_nc, input_width, input_height)
 
     def get_outputshape(self, input_nc, input_width, input_height ):
@@ -501,15 +501,16 @@ class JustConv(nn.Module):
         return self.forward(x).size()
 
     def forward(self, x):
-        out = F.relu(self.conv1(x))
+        out = tf.keras.layers.ReLU(self.conv1(x))
+        
         return out
 
 
-class ConvPool(nn.Module):
+class ConvPool():
     """ 1 convolution + 1 max pooling """
     def __init__(self, input_nc, input_width, input_height, 
                  ngf=6, kernel_size=5, downsample=True, **kwargs):
-        super(ConvPool, self).__init__()
+        # super(ConvPool, self).__init__()
         self.downsample = downsample
 
         if max(input_width, input_height) < kernel_size:
@@ -517,7 +518,7 @@ class ConvPool(nn.Module):
             kernel_size = max(input_width, input_height)
             self.downsample = False
 
-        self.conv1 = nn.Conv2d(input_nc, ngf, kernel_size)
+        self.conv1 = tf.keras.layers.Conv2D(input_nc, ngf, kernel_size)
         self.outputshape = self.get_outputshape(input_nc, input_width, input_height)
 
     def get_outputshape(self, input_nc, input_width, input_height ):
@@ -531,27 +532,27 @@ class ConvPool(nn.Module):
         return self.forward(x).size()
 
     def forward(self, x):
-        out = F.relu(self.conv1(x))
+        out = tf.keras.layers.ReLU(self.conv1(x))
         if self.downsample:
-            return F.max_pool2d(out, 2)
+            return tf.nn.max_pool2d(out, 2)
         else:
             return out
 
 
-class ResidualTransformer(nn.Module):
+class ResidualTransformer():
     """ Bottleneck without batch-norm
     Got the base codes from
     https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
     """
     def __init__(self, input_nc, input_width, input_height, 
                  ngf=6, stride=1, **kwargs):
-        super(ResidualTransformer, self).__init__()
-        self.conv1 = nn.Conv2d(input_nc, ngf, kernel_size=1, bias=False)
-        self.conv2 = nn.Conv2d(
+        
+        self.conv1 = tf.keras.layers.Conv2D(input_nc, ngf, kernel_size=1, bias=False)
+        self.conv2 = tf.keras.layers.Conv2D(
             ngf, ngf, kernel_size=3, stride=stride, padding=1, bias=False,
         )
-        self.conv3 = nn.Conv2d(ngf, input_nc, kernel_size=1, bias=False)
-        self.relu = nn.ReLU(inplace=True)
+        self.conv3 = tf.keras.layers.Conv2D(ngf, input_nc, kernel_size=1, bias=False)
+        self.relu = tf.keras.layers.ReLU(inplace=True)
         self.stride = stride
         self.outputshape = self.get_outputshape(input_nc, input_width, input_height)
         
@@ -579,7 +580,7 @@ class ResidualTransformer(nn.Module):
         return out
 
 
-class VGG13ConvPool(nn.Module):
+class VGG13ConvPool():
     """ n convolution + 1 max pooling """
     def __init__(self, input_nc, input_width, input_height, 
                  ngf=64, kernel_size=3, batch_norm=True, downsample=True,
@@ -587,10 +588,10 @@ class VGG13ConvPool(nn.Module):
         super(VGG13ConvPool, self).__init__()
         self.downsample = downsample        
         self.batch_norm = batch_norm
-        self.conv1 = nn.Conv2d(
+        self.conv1 = tf.keras.layers.Conv2D(
             input_nc, ngf, kernel_size=kernel_size, padding=int((kernel_size-1)/2),
         )
-        self.conv2 = nn.Conv2d(ngf, ngf, kernel_size=kernel_size, padding=1)
+        self.conv2 = tf.keras.layers.Conv2D(ngf, ngf, kernel_size=kernel_size, padding=1)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
 
@@ -620,29 +621,29 @@ class VGG13ConvPool(nn.Module):
             out = self.relu(self.conv2(out))
         
         if self.downsample:
-            return F.max_pool2d(out, 2)
+            return tf.nn.max_pool2d(out, 2)
         else:
             return out
 
 
 # ########################### (2) Routers ##################################
-class One(nn.Module):
+class One():
     """Route all data points to the left branch branch """
     def __init__(self):
-        super(One, self).__init__()
-        
+        # super(One, self).__init__()
+        pass
     def forward(self, x):
         return 1.0
 
 
-class Router(nn.Module):
+class Router():
     """Convolution + Relu + Global Average Pooling + Sigmoid"""
     def __init__(self, input_nc,  input_width, input_height,
                  kernel_size=28,
                  soft_decision=True,
                  stochastic=False,
                  **kwargs):
-        super(Router, self).__init__()
+        # super(Router, self).__init__()
         self.soft_decision = soft_decision
         self.stochastic = stochastic
 
@@ -650,12 +651,12 @@ class Router(nn.Module):
             warnings.warn('Router kernel too large, shrink it')
             kernel_size = max(input_width, input_height)
 
-        self.conv1 = nn.Conv2d(input_nc, 1, kernel_size=kernel_size)
+        self.conv1 = tf.keras.layers.Conv2D(input_nc, 1, kernel_size=kernel_size)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         # convolution
-        # TODO: x = F.relu(self.conv1(x))
+        # TODO: x = tf.keras.layers.ReLU(self.conv1(x))
         x = self.conv1(x)
         # spatial averaging
         x = x.mean(dim=-1).mean(dim=-1).squeeze()  # global average pooling
@@ -696,7 +697,7 @@ class RouterGAP():
             warnings.warn('Router kernel too large, shrink it')
             kernel_size = max(input_width, input_height)
 
-        self.conv1 = nn.Conv2d(input_nc, ngf, kernel_size=kernel_size)
+        self.conv1 = tf.keras.layers.Conv2D(input_nc, ngf, kernel_size=kernel_size)
         self.linear1 = nn.Linear(ngf, 1)
         self.sigmoid = nn.Sigmoid()
 
@@ -708,7 +709,7 @@ class RouterGAP():
         if self.ngf == 1:
             x = x.mean(dim=-1).mean(dim=-1).squeeze()
         else:
-            x = F.relu(x)
+            x = tf.keras.layers.ReLU(x)
             x = x.mean(dim=-1).mean(dim=-1).squeeze()  # global average pooling
             x = self.linear1(x).squeeze()
 
@@ -724,7 +725,7 @@ class RouterGAP():
             return ops.ST_Indicator()(output)
 
 
-class RouterGAPwithDoubleConv(nn.Module):
+class RouterGAPwithDoubleConv():
     """ 2 x (Convolution + Relu) + Global Average Pooling + FC + Sigmoid """
 
     def __init__(self, input_nc, input_width, input_height, 
@@ -746,8 +747,8 @@ class RouterGAPwithDoubleConv(nn.Module):
                 kernel_size += 1
  
         padding = int((kernel_size-1)/2)
-        self.conv1 = nn.Conv2d(input_nc, ngf, kernel_size=kernel_size, padding=padding)
-        self.conv2 = nn.Conv2d(ngf, ngf, kernel_size=kernel_size, padding=padding)
+        self.conv1 = tf.keras.layers.Conv2D(input_nc, ngf, kernel_size=kernel_size, padding=padding)
+        self.conv2 = tf.keras.layers.Conv2D(ngf, ngf, kernel_size=kernel_size, padding=padding)
         self.relu = nn.ReLU(inplace=True)
         self.linear1 = nn.Linear(ngf, 1)
         self.sigmoid = nn.Sigmoid()
@@ -796,7 +797,7 @@ class Router_MLP_h1():
     def forward(self, x):
         # 2 fc layers:
         x = x.view(x.size(0), -1)
-        x = F.relu(self.fc1(x)).squeeze()
+        x = tf.keras.layers.ReLU(self.fc1(x)).squeeze()
         # get probability of "left" or "right"
         x = self.output_controller(x)
         return x
@@ -839,8 +840,8 @@ class RouterGAP_TwoFClayers():
         # spatial averaging
         x = x.mean(dim=-1).mean(dim=-1).squeeze()  # global average pooling
         # 2 fc layers:
-        x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training, p=self.dropout_prob)
+        x = tf.keras.layers.ReLU(self.fc1(x))
+        x = tf.nn.dropout(x, training=self.training, p=self.dropout_prob)
         x = self.fc2(x).squeeze()
         # get probability of "left" or "right"
         x = self.output_controller(x)
@@ -882,19 +883,19 @@ class RouterGAPwithConv_TwoFClayers():
             warnings.warn('Router kernel too large, shrink it')
             kernel_size = max(input_width, input_height)
 
-        self.conv1 = nn.Conv2d(input_nc, ngf, kernel_size=kernel_size)
+        self.conv1 = tf.keras.layers.Conv2D(input_nc, ngf, kernel_size=kernel_size)
         self.fc1 = nn.Linear(ngf, ngf/reduction_rate + 1)
         self.fc2 = nn.Linear(ngf/reduction_rate + 1, 1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         # convolution:
-        x = F.relu(self.conv1(x))
+        x = tf.keras.layers.ReLU(self.conv1(x))
         # spatial averaging
         x = x.mean(dim=-1).mean(dim=-1).squeeze()  # global average pooling
         # 2 fc layers:
-        x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training, p=self.dropout_prob)
+        x = tf.keras.layers.ReLU(self.fc1(x))
+        x = tf.nn.dropout(x, training=self.training, p=self.dropout_prob)
         x = self.fc2(x).squeeze()
         # get probability of "left" or "right"
         x = self.output_controller(x)
@@ -915,7 +916,7 @@ class RouterGAPwithConv_TwoFClayers():
 
 
 # ############################ (3) Solvers ####################################
-class LR(nn.Module):
+class LR():
     """ Logistinc regression
     """
     def __init__(self, input_nc, input_width, input_height, no_classes=10, **kwargs):
@@ -924,10 +925,10 @@ class LR(nn.Module):
 
     def forward(self, x):
         x = x.view(x.size(0), -1)
-        return F.log_softmax(self.fc(x))
+        return tf.nn.log_softmax(self.fc(x))
 
 
-class MLP_LeNet(nn.Module):
+class MLP_LeNet():
     """ The last fully-connected part of LeNet
     """
     def __init__(self, input_nc, input_width, input_height, no_classes=10, **kwargs):
@@ -939,10 +940,10 @@ class MLP_LeNet(nn.Module):
 
     def forward(self, x):
         out = x.view(x.size(0), -1)
-        out = F.relu(self.fc1(out))
-        out = F.relu(self.fc2(out))
+        out = tf.keras.layers.ReLU(self.fc1(out))
+        out = tf.keras.layers.ReLU(self.fc2(out))
         out = self.fc3(out)
-        return F.log_softmax(out)
+        return tf.nn.log_softmax(out)
 
 
 class MLP_LeNetMNIST():
@@ -958,10 +959,10 @@ class MLP_LeNetMNIST():
        
     def forward(self, x):
         x = x.view(x.size(0), -1)
-        x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training, p=self.dropout_prob)
+        x = tf.keras.layers.ReLU(self.fc1(x))
+        x = tf.nn.dropout(x, training=self.training, p=self.dropout_prob)
         x = self.fc2(x)
-        return F.log_softmax(x)
+        return tf.nn.log_softmax(x)
 
 
 class Solver_GAP_TwoFClayers():
@@ -972,9 +973,9 @@ class Solver_GAP_TwoFClayers():
         self.dropout_prob = dropout_prob
         self.reduction_rate = reduction_rate
 
-        self.fc1 = nn.Linear(input_nc, input_nc/reduction_rate + 1)
-        self.fc2 = nn.Linear(input_nc/reduction_rate + 1, 10)
-        self.sigmoid = nn.Sigmoid()
+        self.fc1 = tf.keras.layers.Dense(input_nc, input_nc/reduction_rate + 1)
+        self.fc2 = tf.keras.layers.Dense(input_nc/reduction_rate + 1, 10)
+        self.sigmoid = tf.nn.sigmoid()
 
     def forward(self, x):
         # spatial averaging
@@ -983,7 +984,7 @@ class Solver_GAP_TwoFClayers():
         x = tf.keras.layers.ReLU(self.fc1(x))
         x = tf.keras.layers.Dropout(x)
         x = self.fc2(x).squeeze()
-        return F.log_softmax(x)
+        return tf.nn.log_softmax(x)
 
 
 class MLP_AlexNet():
@@ -1002,7 +1003,7 @@ class MLP_AlexNet():
         x = tf.keras.layers.ReLU(self.fc1(x))
         # x = tf.keras.layers.Dropout(x, training=self.training, p=self.dropout_prob)
         x = self.fc2(x)
-        return tf.keras.layers.Softmax(x)
+        return tf.nn.softmax(x)
 
 
 class Solver_GAP_OneFClayers():
@@ -1014,11 +1015,11 @@ class Solver_GAP_OneFClayers():
         self.reduction_rate = reduction_rate
 
         self.fc1 = tf.keras.layers.Dense(input_nc, 10)
-        self.sigmoid = tf.keras.activations.sigmoid()
+        self.sigmoid = tf.nn.sigmoid()
 
     def forward(self, x):
         # spatial averaging
         x = x.mean(dim=-1).mean(dim=-1).squeeze()  
         x = tf.keras.layers.Dropout(x, training=self.training, p=self.dropout_prob)
         x = self.fc1(x)
-        return F.log_softmax(x)
+        return tf.nn.log_softmax(x)
